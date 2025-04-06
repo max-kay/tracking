@@ -40,26 +40,23 @@ def id_to_person(id: int) -> str:
     return str(id)
 
 
-LOGS_DIR = "./logs/"
-
-
-def make_log_from_starter(starter) -> None:
+def make_log_from_starter(starter) -> bool:
     try:
         name = id_to_person(starter["id"])
     except KeyError:
         eprint(f"skipped unnamed starter")
-        return
+        return False
 
     current = starter.get("current")
     if current == None:
         eprint(f"skipped {name}, because there was no 'current' object")
-        return
+        return False
 
     try:
-        time = dt.datetime.fromisoformat(current["time"].replace("Z", "+01:00"))
+        time_stamp = dt.datetime.fromisoformat(current["time"].replace("Z", "+01:00"))
     except:
         eprint(f"failed to get time for {name}")
-        time = dt.datetime.now()
+        time_stamp = dt.datetime.now()
 
     speed = current.get("speedRaw")
 
@@ -68,7 +65,7 @@ def make_log_from_starter(starter) -> None:
         lng = current["lng"]
     except KeyError:
         eprint(f"skipped {name} because it did not contain position")
-        return
+        return False
 
     # this can be null in json
     device = starter.get("device")
@@ -82,12 +79,17 @@ def make_log_from_starter(starter) -> None:
     # also creates a file if it doesn't exist
     with open(f"logs/{name}.txt", mode="a") as file:
         file.write(
-            f"{time.isoformat()}, {speed}, ({lat}, {lng}), {battery}, {online}\n"
+            f"{time_stamp.isoformat()}, {speed}, ({lat}, {lng}), {battery}, {online}\n"
         )
+    return True
 
 
 def log_cycle():
-    response = requests.get(API_URL)
+    try:
+        response = requests.get(API_URL, timeout=2)
+    except requests.exceptions.ConnectTimeout:
+        eprint("connection timed out")
+        return
     if response.status_code != 200:
         eprint(f"got response code {response.status_code}\n    {response.text}")
         return
@@ -98,12 +100,17 @@ def log_cycle():
         eprint("encountered malformed json")
         return
 
+    success = True
+
     for starter in obj["starters"]:
-        make_log_from_starter(starter)
+        success = success and make_log_from_starter(starter)
+    if success:
+        eprint("successfully loged all participants")
 
 
 def main():
     while True:
+        start_time = dt.datetime.now()
         for i in range(10):
             try:
                 log_cycle()
@@ -113,7 +120,8 @@ def main():
                 time.sleep(5)
         else:
             eprint("gave up for this log cycle")
-        time.sleep(60 * 1.5)
+        delta = dt.datetime.now() - start_time
+        time.sleep((dt.timedelta(minutes=1.5) - delta).total_seconds())
 
 
 if __name__ == "__main__":
