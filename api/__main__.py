@@ -60,6 +60,9 @@ def make_log_from_starter(starter) -> bool:
 
     speed = current.get("speedRaw")
 
+    if abs(speed - 200) < 5:
+        speed = None
+
     try:
         lat = current["lat"]
         lng = current["lng"]
